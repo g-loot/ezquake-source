@@ -314,7 +314,8 @@ OBJS_c := \
     sys_sdl2.o \
     in_sdl2.o \
     cl_multiview.o \
-    snd_voip.o
+    snd_voip.o \
+    gloot.o
 
 ### Configuration Options ###
 

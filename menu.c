@@ -41,6 +41,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #include "qsound.h"
 #include "keys.h"
 #include "common_draw.h"
+#include "gloot.h"
 
 
 qbool vid_windowedmouse = true;
@@ -58,6 +59,7 @@ void M_Menu_Main_f (void);
 			void M_Menu_SEdit_f (void);
 		void M_Menu_Demos_f (void);
 		void M_Menu_GameOptions_f (void);
+	void M_Menu_Gloot_f (void);
 	void M_Menu_Options_f (void);
 	void M_Menu_Quit_f (void);
 
@@ -391,6 +393,7 @@ typedef struct bigmenu_items_s {
 bigmenu_items_t mainmenu_items[] = {
 	{"Single Player", M_Menu_SinglePlayer_f},
 	{"Multiplayer", M_Menu_MultiPlayer_f},
+	{"GLoot", M_Menu_Gloot_f},
 	{"Options", M_Menu_Options_f},
 	{"Demos", M_Menu_Demos_f},
 	{"Help", M_Menu_Help_f},
@@ -470,6 +473,7 @@ static void M_Main_Enter(const unsigned int entry)
 		case 1:	M_Menu_MultiPlayer_f (); break;
 		case 2: M_Menu_Options_f (); break;
 		case 4: M_Menu_Quit_f (); break;
+		case 5: M_Menu_Gloot_f (); break;
 		}
 	}
 }
@@ -679,6 +683,35 @@ void M_Quit_Draw (void) { // Quit screen text.
 	M_PrintWhite (16, 180, "Nothing Interactive, Inc. All rights\n");
 	M_PrintWhite (16, 188, "reserved.\n\n");
 	M_Print (16, 204, "          Press y to exit\n");
+}
+
+// GLoot
+//
+
+void M_Menu_Gloot_f (void) {
+	M_EnterMenu (m_gloot);
+	Gloot_Init ();
+}
+
+void M_Gloot_Draw (void) {
+	M_PrintWhite (64, 11*8, "Finding matches");
+}
+
+void M_Gloot_Key (int key) {
+	switch (key) {
+		case K_BACKSPACE:
+			m_topmenu = m_none;    // intentional fallthrough
+		case K_ESCAPE:
+		case K_ENTER:
+			M_LeaveMenu (m_main);
+			break;
+
+		case '`':
+		case '~':
+			key_dest = key_console;
+			m_state = m_none;
+			break;
+	}
 }
 
 //=============================================================================
@@ -1345,6 +1378,7 @@ void M_Draw (void) {
 		case m_none: break;
 		case m_main:			M_Main_Draw (); break;
 		case m_singleplayer:	M_SinglePlayer_Draw (); break;
+        case m_gloot:			M_Gloot_Draw (); break;
 #ifndef CLIENTONLY
 		case m_load:			M_Load_Draw (); break;
 		case m_save:			M_Save_Draw (); break;
@@ -1406,6 +1440,7 @@ void M_Keydown (int key, wchar unichar) {
 		case m_none: return;
 		case m_main:			M_Main_Key(key); return;
 		case m_singleplayer:	M_SinglePlayer_Key(key); return;
+		case m_gloot:			M_Gloot_Key(key); return;
 #ifndef CLIENTONLY
 		case m_load:			M_Load_Key(key); return;
 		case m_save:			M_Save_Key(key); return;

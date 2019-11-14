@@ -66,6 +66,7 @@ typedef enum {
     m_options,
 	m_help,
 	m_quit, m_ingame, 
+    m_gloot
 } m_state_t;
 
 extern m_state_t m_state;
