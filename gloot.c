@@ -1,18 +1,19 @@
 // TODO
-// - Send user token
-// - Parse json response
-// - Wait for match to start matchId to get state
-// - Connect to server
+// - Send user token - 4
 #include <curl/curl.h>
+#include <jansson.h>
 #include "quakedef.h"
 #include "fs.h"
+#include "menu.h"
+#include "utils.h"
+
 
 #define BASE_URL "https://coin-gloot-dev.appspot.com/api/v1"
 #define GAME_ID "5898192534634496"
 #define MAX_TRIES 10
 
 //#define JOIN_URL BASE_URL + "/join?nickname=curl"
-#define JOIN_URL "http://localhost:8000/join?nickname=curl"
+#define JOIN_URL "http://localhost:8000/join?nickname="
 #define GET_MATCH_URL "http://localhost:8000/match/123"
 
 // Used by curl to read server lists from the web
@@ -60,7 +61,12 @@ struct curl_buf* Get_Match_Data(void)
 
 	curl = curl_easy_init();
 	if (curl) {
-		curl_easy_setopt(curl, CURLOPT_URL, JOIN_URL);
+		char url[200];
+		char *name = Info_ValueForKey(cls.userinfo, "name");
+		strcpy(url, JOIN_URL);
+		strcat(url, name);
+		Com_Printf("match url: %s\n", url);
+		curl_easy_setopt(curl, CURLOPT_URL, url);
 		curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
 	}
 	else {
@@ -86,24 +92,46 @@ struct curl_buf* Get_Match_Data(void)
 
 qbool Process_Get_Match_Response(struct curl_buf* curl_data)
 {
-	char *buf;
+	char *json = NULL;
 	qbool success = false;
 
-	// Don't modify curl_buf as it might be used to create cache file
-	buf = Q_malloc(sizeof(char) * curl_data->len);
-	memcpy(buf, curl_data->ptr, sizeof(char) * curl_data->len);
-	Com_Printf("Server response %s\n", buf);
-	if (strstr(buf, "STARTED") != NULL) {
-		Com_Printf("Match started! Connecting to server");
-		success = true; // TODO actually connect to the server
+	// Don't modify curl_data as it might be used to create cache file
+	json = Q_malloc(sizeof(char) * curl_data->len);
+	memcpy(json, curl_data->ptr, sizeof(char) * curl_data->len);
+	// extract match state from json
+	json_t *json_root = NULL;
+	json_t *match_state = NULL;
+	json_error_t error;
+
+	json_root = json_loads(json, 0, &error);
+	if (json_root == NULL || !json_is_object(json_root)) {
+		Com_Printf("error: cannot parse json 3\n%s\n", json);
+		success = false;
 	} else {
-		Com_Printf("Match not started yet");
+		match_state = json_object_get(json_root, "state");
+		if (!json_is_string(match_state)) {
+			Com_Printf("error: cannot parse json 4\n%s\n", json);
+			success = false;
+		} else {
+			const char *match_state_str = json_string_value(match_state);
+			success = strcmp(match_state_str, "STARTED") == 0;
+			if (success) {
+				Com_Printf("Match started! Connecting to server.\n");
+				const char *host = json_string_value(json_object_get(json_root, "hostname"));
+				const char *port = json_string_value(json_object_get(json_root, "port"));
+				Cbuf_AddText("connect ");
+				Cbuf_AddText(va("%s:%s", host, port)); // add the command but dont send it.
+			}
+		}
 	}
-	Q_free(buf);
+	if (json_root != NULL) {
+		json_decref(json_root);
+	}
+	Q_free(json);
 	return success;
 }
 
-qbool Wait_For_Match(char *match_id)
+qbool Wait_For_Match(const char *match_id)
 {
 	qbool success = false;
 	CURL *curl;
@@ -136,6 +164,7 @@ qbool Wait_For_Match(char *match_id)
 		}
 		curl_easy_cleanup(curl);
 		success = Process_Get_Match_Response(curl_buf);
+		success = true;
 		if (!success) Sys_MSleep(1000);
 	}
 	return success;
@@ -143,22 +172,35 @@ qbool Wait_For_Match(char *match_id)
 
 qbool Process_Join_Response(struct curl_buf* curl_data)
 {
-	char *buf;
+	char *json;
 	qbool success = false;
+	json_t *json_root = NULL;
+	json_t *match_id = NULL;
+	json_error_t error;
 
-	// Don't modify curl_buf as it might be used to create cache file
-	buf = Q_malloc(sizeof(char) * curl_data->len);
-	memcpy(buf, curl_data->ptr, sizeof(char) * curl_data->len);
-	Com_Printf("Server response %s\n", buf);
-	if (strstr(buf, "matchId") != NULL) {
-		Com_Printf("Match found. Connecting...");
-		success = Wait_For_Match("123"); // TODO get match id from buf
+	// Don't modify curl_data as it might be used to create cache file
+	json = Q_malloc(sizeof(char) * curl_data->len);
+	memcpy(json, curl_data->ptr, sizeof(char) * curl_data->len);
+	// extract matchId from json
+	json_root = json_loads(json, 0, &error);
+	if (json_root == NULL || !json_is_object(json_root)) {
+		Com_Printf("error: cannot parse json 1\n%s\n", json);
+		success = false;
 	} else {
-		Com_Printf("Cannot connect to match");
-		Com_Printf("Server response %s\n", buf);
+		match_id = json_object_get(json_root, "matchId");
+		if (!json_is_string(match_id)) {
+			Com_Printf("error: cannot parse json 2\n%s\n", json);
+			success = false;
+		} else {
+			const char *match_id_str = json_string_value(match_id);
+			Com_Printf("Match found: %s\n", match_id_str);
+			success = Wait_For_Match(match_id_str);
+		}
 	}
-
-	Q_free(buf);
+	if (json_root != NULL) {
+		json_decref(json_root);
+	}
+	Q_free(json);
 	return success;
 }
 
@@ -178,14 +220,11 @@ int Join_Match(void * params)
 		if (!success) Sys_MSleep(200);
 	}
 	if (success) {
-		Com_Printf("Here it should connect.\n");
-		/*Con_Printf("connect localhost:28000\n");*/
-		Cbuf_AddText("connect ");
-		Cbuf_AddText("localhost:28000");
 		Cbuf_AddText("\n");
 	} else {
 		Com_Printf("Cannot connect to match. Please try again.\n");
 	}
+	M_LeaveMenus();
 	return 0;
 }
 
