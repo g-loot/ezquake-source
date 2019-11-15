@@ -1,5 +1,3 @@
-// TODO
-// - Send user token - 4
 #include <curl/curl.h>
 #include <jansson.h>
 #include "quakedef.h"
@@ -14,7 +12,7 @@
 
 //#define JOIN_URL BASE_URL + "/join?nickname=curl"
 #define JOIN_URL "http://localhost:8000/join?nickname="
-#define GET_MATCH_URL "http://localhost:8000/match/123"
+#define GET_MATCH_URL "http://localhost:8000/match/"
 #define AUTH_HEADER "Authorization: Bearer "
 
 // Used by curl to read server lists from the web
@@ -54,6 +52,15 @@ static size_t curl_write_func( void *ptr, size_t size, size_t nmemb, void* buf_)
 	return size * nmemb;
 }
 
+void Add_AuthHeader(CURL *curl, char *access_token) {
+	struct curl_slist *chunk = NULL;
+	char auth_header[strlen(AUTH_HEADER) + strlen(access_token)];
+	strcpy(auth_header, AUTH_HEADER);
+	strcat(auth_header, access_token);
+	chunk = curl_slist_append(chunk, auth_header);
+	curl_easy_setopt(curl, CURLOPT_HTTPHEADER, chunk);
+}
+
 struct curl_buf* Get_Match_Data(char *access_token)
 {
 	CURL *curl;
@@ -64,18 +71,13 @@ struct curl_buf* Get_Match_Data(char *access_token)
 	if (curl) {
 		char url[200];
 		char *name = Info_ValueForKey(cls.userinfo, "name");
-		struct curl_slist *chunk = NULL;
 		strcpy(url, JOIN_URL);
 		strcat(url, name);
 		Com_Printf("match url: %s\n", url);
 		curl_easy_setopt(curl, CURLOPT_URL, url);
 		curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
 		// add header
-		char auth_header[strlen(AUTH_HEADER) + strlen(access_token)];
-		strcpy(auth_header, AUTH_HEADER);
-		strcat(auth_header, access_token);
-		chunk = curl_slist_append(chunk, auth_header);
-		curl_easy_setopt(curl, CURLOPT_HTTPHEADER, chunk);
+		Add_AuthHeader(curl, access_token);
 	}
 	else {
 		Com_Printf_State(PRINT_FAIL, "GLoog_Init() Can't init cURL\n");
@@ -153,7 +155,7 @@ qbool Process_Get_Match_Response(struct curl_buf* curl_data)
 	return success;
 }
 
-qbool Wait_For_Match(const char *match_id)
+qbool Wait_For_Match(char *access_token, const char *match_id)
 {
 	qbool success = false;
 	CURL *curl;
@@ -162,8 +164,12 @@ qbool Wait_For_Match(const char *match_id)
 
 	curl = curl_easy_init();
 	if (curl) {
-		curl_easy_setopt(curl, CURLOPT_URL, GET_MATCH_URL);
+		char match_url[strlen(GET_MATCH_URL) + strlen(match_id)];
+		strcpy(match_url, GET_MATCH_URL);
+		strcat(match_url, match_id);
+		curl_easy_setopt(curl, CURLOPT_URL, match_url);
 		curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
+		Add_AuthHeader(curl, access_token);
 	}
 	else {
 		Com_Printf_State(PRINT_FAIL, "Wait_For_Match() Can't init cURL\n");
@@ -192,7 +198,7 @@ qbool Wait_For_Match(const char *match_id)
 	return success;
 }
 
-qbool Process_Join_Response(struct curl_buf* curl_data)
+qbool Process_Join_Response(char *access_token, struct curl_buf* curl_data)
 {
 	char *json;
 	qbool success = false;
@@ -216,7 +222,7 @@ qbool Process_Join_Response(struct curl_buf* curl_data)
 		} else {
 			const char *match_id_str = json_string_value(match_id);
 			Com_Printf("Match found: %s\n", match_id_str);
-			success = Wait_For_Match(match_id_str);
+			success = Wait_For_Match(access_token, match_id_str);
 		}
 	}
 	if (json_root != NULL) {
@@ -245,7 +251,7 @@ int Join_Match(void * params)
 		if (curl_data == NULL) {
 			return 0;
 		}
-		success = Process_Join_Response(curl_data);
+		success = Process_Join_Response(access_token, curl_data);
 		curl_buf_deinit(curl_data);
 		if (!success) Sys_MSleep(200);
 	}
