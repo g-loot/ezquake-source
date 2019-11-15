@@ -166,27 +166,26 @@ qbool Wait_For_Match(char *access_token, const char *match_id)
 	CURLcode res;
 	struct curl_buf *curl_buf;
 
-	curl = curl_easy_init();
-	if (curl) {
-		char match_url[strlen(GET_MATCH_URL) + strlen(match_id)];
-		strcpy(match_url, GET_MATCH_URL);
-		strcat(match_url, match_id);
-		curl_easy_setopt(curl, CURLOPT_URL, match_url);
-		curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
-		curl_easy_setopt(curl, CURLOPT_HTTP_VERSION, CURL_HTTP_VERSION_1_1);
-		Add_AuthHeader(curl, access_token);
-	}
-	else {
-		Com_Printf_State(PRINT_FAIL, "Wait_For_Match() Can't init cURL\n");
-		return false;
-	}
-
-	curl_buf = curl_buf_init();
-	curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, curl_write_func);
-	curl_easy_setopt(curl, CURLOPT_WRITEDATA, curl_buf);
-
 	for (int tries = 0; !success && tries < 60; tries++ )
 	{
+		curl = curl_easy_init();
+		if (curl) {
+			char match_url[strlen(GET_MATCH_URL) + strlen(match_id)];
+			strcpy(match_url, GET_MATCH_URL);
+			strcat(match_url, match_id);
+			curl_easy_setopt(curl, CURLOPT_URL, match_url);
+			curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
+			curl_easy_setopt(curl, CURLOPT_HTTP_VERSION, CURL_HTTP_VERSION_1_1);
+			Add_AuthHeader(curl, access_token);
+		}
+		else {
+			Com_Printf_State(PRINT_FAIL, "Wait_For_Match() Can't init cURL\n");
+			return false;
+		}
+
+		curl_buf = curl_buf_init();
+		curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, curl_write_func);
+		curl_easy_setopt(curl, CURLOPT_WRITEDATA, curl_buf);
 		Com_Printf("Waiting for match to start...\n");
 		res = curl_easy_perform(curl);
 		if (res != CURLE_OK) {
@@ -195,9 +194,8 @@ qbool Wait_For_Match(char *access_token, const char *match_id)
 			curl_buf_deinit(curl_buf);
 			return false;
 		}
-		curl_easy_cleanup(curl);
 		success = Process_Get_Match_Response(curl_buf);
-		success = true;
+		curl_easy_cleanup(curl);
 		if (!success) Sys_MSleep(1000);
 	}
 	return success;
