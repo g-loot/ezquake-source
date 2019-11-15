@@ -6,14 +6,15 @@
 #include "utils.h"
 
 
-#define BASE_URL "https://coin-gloot-dev.appspot.com/api/v1"
+#define BASE_URL "https://coin-gloot-dev.appspot.com/api/v1/quakeworld"
 #define GAME_ID "5898192534634496"
 #define MAX_TRIES 10
 
-//#define JOIN_URL BASE_URL + "/join?nickname=curl"
-#define JOIN_URL "http://localhost:8000/join?nickname="
-#define GET_MATCH_URL "http://localhost:8000/match/"
+//#define JOIN_URL "http://localhost:8000/join?nickname="
+//#define GET_MATCH_URL "http://localhost:8000/match/"
 #define AUTH_HEADER "Authorization: Bearer "
+#define JOIN_URL      BASE_URL "/join?nickname="
+#define GET_MATCH_URL BASE_URL "/match/"
 
 // Used by curl to read server lists from the web
 struct curl_buf
@@ -76,6 +77,7 @@ struct curl_buf* Get_Match_Data(char *access_token)
 		Com_Printf("match url: %s\n", url);
 		curl_easy_setopt(curl, CURLOPT_URL, url);
 		curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
+		curl_easy_setopt(curl, CURLOPT_HTTP_VERSION, CURL_HTTP_VERSION_1_1);
 		// add header
 		Add_AuthHeader(curl, access_token);
 	}
@@ -91,6 +93,7 @@ struct curl_buf* Get_Match_Data(char *access_token)
 	res = curl_easy_perform(curl);
 	if (res != CURLE_OK) {
 		Com_Printf("Gloot_Init(): Could not read URL %s\n", JOIN_URL);
+		Com_Printf("Error %d\n", res);
 		curl_easy_cleanup(curl);
 		curl_buf_deinit(curl_buf);
 		return NULL;
@@ -142,6 +145,7 @@ qbool Process_Get_Match_Response(struct curl_buf* curl_data)
 			if (success) {
 				Com_Printf("Match started! Connecting to server.\n");
 				const char *host = json_string_value(json_object_get(json_root, "hostname"));
+				// it fails to parse long numbers, thus using string
 				const char *port = json_string_value(json_object_get(json_root, "port"));
 				Cbuf_AddText("connect ");
 				Cbuf_AddText(va("%s:%s", host, port)); // add the command but dont send it.
@@ -169,6 +173,7 @@ qbool Wait_For_Match(char *access_token, const char *match_id)
 		strcat(match_url, match_id);
 		curl_easy_setopt(curl, CURLOPT_URL, match_url);
 		curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
+		curl_easy_setopt(curl, CURLOPT_HTTP_VERSION, CURL_HTTP_VERSION_1_1);
 		Add_AuthHeader(curl, access_token);
 	}
 	else {
