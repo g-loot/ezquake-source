@@ -15,6 +15,7 @@
 //#define JOIN_URL BASE_URL + "/join?nickname=curl"
 #define JOIN_URL "http://localhost:8000/join?nickname="
 #define GET_MATCH_URL "http://localhost:8000/match/123"
+#define AUTH_HEADER "Authorization: Bearer "
 
 // Used by curl to read server lists from the web
 struct curl_buf
@@ -53,7 +54,7 @@ static size_t curl_write_func( void *ptr, size_t size, size_t nmemb, void* buf_)
 	return size * nmemb;
 }
 
-struct curl_buf* Get_Match_Data(void)
+struct curl_buf* Get_Match_Data(char *access_token)
 {
 	CURL *curl;
 	CURLcode res;
@@ -63,11 +64,18 @@ struct curl_buf* Get_Match_Data(void)
 	if (curl) {
 		char url[200];
 		char *name = Info_ValueForKey(cls.userinfo, "name");
+		struct curl_slist *chunk = NULL;
 		strcpy(url, JOIN_URL);
 		strcat(url, name);
 		Com_Printf("match url: %s\n", url);
 		curl_easy_setopt(curl, CURLOPT_URL, url);
 		curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
+		// add header
+		char auth_header[strlen(AUTH_HEADER) + strlen(access_token)];
+		strcpy(auth_header, AUTH_HEADER);
+		strcat(auth_header, access_token);
+		chunk = curl_slist_append(chunk, auth_header);
+		curl_easy_setopt(curl, CURLOPT_HTTPHEADER, chunk);
 	}
 	else {
 		Com_Printf_State(PRINT_FAIL, "GLoog_Init() Can't init cURL\n");
@@ -88,6 +96,20 @@ struct curl_buf* Get_Match_Data(void)
 
 	curl_easy_cleanup(curl);
 	return curl_buf;
+}
+
+char *Load_AccessToken(void)
+{
+	char *token = NULL;
+	int filesize;
+	byte *data = (byte *) FS_LoadHeapFile ("gloot.jwt", &filesize);
+	if (data != NULL) {
+		token = Q_malloc(sizeof(char) * filesize + 1);
+		strcpy(token, (char *) data);
+		Q_free(data);
+		Con_Printf("Access token found.");
+	}
+	return token;
 }
 
 qbool Process_Get_Match_Response(struct curl_buf* curl_data)
@@ -206,12 +228,20 @@ qbool Process_Join_Response(struct curl_buf* curl_data)
 
 int Join_Match(void * params)
 {
+	char *access_token;
+	access_token = Load_AccessToken();
+	if (access_token == NULL) {
+		Com_Printf("Missing access_token. Please add it to gloot.jwt\n");
+		return 0;
+	}
+
 	qbool success = false;
+
 	for (int tries = 0; !success && tries < MAX_TRIES; tries++)
 	{
 		Com_Printf("Contacting server....\n");
 		struct curl_buf *curl_data;
-		curl_data = Get_Match_Data();
+		curl_data = Get_Match_Data(access_token);
 		if (curl_data == NULL) {
 			return 0;
 		}
@@ -225,6 +255,7 @@ int Join_Match(void * params)
 		Com_Printf("Cannot connect to match. Please try again.\n");
 	}
 	M_LeaveMenus();
+	Q_free(access_token);
 	return 0;
 }
 
