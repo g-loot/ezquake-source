@@ -393,7 +393,7 @@ typedef struct bigmenu_items_s {
 bigmenu_items_t mainmenu_items[] = {
 	{"Single Player", M_Menu_SinglePlayer_f},
 	{"Multiplayer", M_Menu_MultiPlayer_f},
-	{"GLoot", M_Menu_Gloot_f},
+	{"GLoot MatchMaking", M_Menu_Gloot_f},
 	{"Options", M_Menu_Options_f},
 	{"Demos", M_Menu_Demos_f},
 	{"Help", M_Menu_Help_f},
