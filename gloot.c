@@ -139,96 +139,12 @@ char *Load_AccessToken(void)
 	return token;
 }
 
-// not used remove
-qbool Process_Get_Match_Response(struct curl_buf* curl_data)
-{
-	char *json = NULL;
-	qbool success = false;
-
-	// Don't modify curl_data as it might be used to create cache file
-	json = Q_malloc(sizeof(char) * curl_data->len);
-	memcpy(json, curl_data->ptr, sizeof(char) * curl_data->len);
-	// extract match state from json
-	json_t *json_root = NULL;
-	json_t *match_state = NULL;
-	json_error_t error;
-
-	json_root = json_loads(json, 0, &error);
-	if (json_root == NULL || !json_is_object(json_root)) {
-		Com_Printf("error: cannot parse json 3\n%s\n", json);
-		success = false;
-	} else {
-		match_state = json_object_get(json_root, "state");
-		if (!json_is_string(match_state)) {
-			Com_Printf("error: cannot parse json 4\n%s\n", json);
-			success = false;
-		} else {
-			const char *match_state_str = json_string_value(match_state);
-			success = strcmp(match_state_str, "STARTED") == 0;
-			if (success) {
-				Com_Printf("Match started! Connecting to server.\n");
-				const char *host = json_string_value(json_object_get(json_root, "serverLocation"));
-				Cbuf_AddText("connect ");
-				Cbuf_AddText(va("%s", host)); // add the command but dont send it.
-			}
-		}
-	}
-	if (json_root != NULL) {
-		json_decref(json_root);
-	}
-	Q_free(json);
-	return success;
-}
-
 qbool Connect_To_Match(const char *server_loc)
 {
 	Com_Printf("Match started! Connecting to server %s.\n", server_loc);
 	Cbuf_AddText("connect ");
 	Cbuf_AddText(server_loc); // add the command but dont send it.
 	return true;
-}
-
-// not used anymore
-qbool Wait_For_Match(char *access_token, const char *match_id)
-{
-	qbool success = false;
-	CURL *curl;
-	CURLcode res;
-	struct curl_buf *curl_buf;
-
-	for (int tries = 0; !success && tries < 60; tries++ )
-	{
-		curl = curl_easy_init();
-		if (curl) {
-			char match_url[strlen(GET_MATCH_URL) + strlen(match_id)];
-			strcpy(match_url, GET_MATCH_URL);
-			strcat(match_url, match_id);
-			curl_easy_setopt(curl, CURLOPT_URL, match_url);
-			curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
-			curl_easy_setopt(curl, CURLOPT_HTTP_VERSION, CURL_HTTP_VERSION_1_1);
-			Add_AuthHeader(NULL, curl, access_token);
-		}
-		else {
-			Com_Printf_State(PRINT_FAIL, "Wait_For_Match() Can't init cURL\n");
-			return false;
-		}
-
-		curl_buf = curl_buf_init();
-		curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, curl_write_func);
-		curl_easy_setopt(curl, CURLOPT_WRITEDATA, curl_buf);
-		Com_Printf("Waiting for match to start...\n");
-		res = curl_easy_perform(curl);
-		if (res != CURLE_OK) {
-			Com_Printf("Wait_For_Match(): Could not read URL %s\n", JOIN_URL);
-			curl_easy_cleanup(curl);
-			curl_buf_deinit(curl_buf);
-			return false;
-		}
-		success = Process_Get_Match_Response(curl_buf);
-		curl_easy_cleanup(curl);
-		if (!success) Sys_MSleep(1000);
-	}
-	return success;
 }
 
 qbool Process_Join_Response(char *access_token, struct curl_buf* curl_data)
@@ -243,7 +159,7 @@ qbool Process_Join_Response(char *access_token, struct curl_buf* curl_data)
 	json = Q_malloc(sizeof(char) * curl_data->len);
 	memcpy(json, curl_data->ptr, sizeof(char) * curl_data->len);
 	// extract server location from json
-	json_root = json_loads(json, 0, &error);
+	json_root = json_loads(json, JSON_DISABLE_EOF_CHECK, &error);
 	if (json_root == NULL || !json_is_object(json_root)) {
 		Com_Printf("error: cannot parse json 1\n%s\n", json);
 		success = false;
@@ -284,7 +200,6 @@ int Join_Match(void * params)
 		if (curl_data == NULL) {
 			return 0;
 		}
-		/*success = false;*/
 		success = Process_Join_Response(access_token, curl_data);
 		curl_buf_deinit(curl_data);
 		if (!success) Sys_MSleep(200);
@@ -305,9 +220,4 @@ void Gloot_Init(void)
 		Com_Printf("Failed to create Poll_Matches thread\n");
 	}
 }
-
-
-
-
-
 
